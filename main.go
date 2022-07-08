@@ -12,9 +12,9 @@ import (
 
 type Arguments map[string]string
 type user struct {
-	Id    string
-	Email string
-	Age   string
+	Id    string `json:"id,omitempty"`
+	Email string `json:"email,omitempty"`
+	Age   int    `json:"age,omitempty"`
 }
 
 var jsonUsers []user
@@ -23,6 +23,13 @@ var jsonUser user
 func Perform(args Arguments, writer io.Writer) error {
 	// Recieved parsed commands and write the related data
 	// to console
+	if args["fileName"] == "" {
+		return fmt.Errorf("-fileName flag has to be specified")
+	}
+	// common error check
+	if args["operation"] == "" {
+		return fmt.Errorf("-operation flag has to be specified")
+	}
 
 	// open file
 	fileJson, error := os.OpenFile(args["fileName"], os.O_RDWR|os.O_CREATE, 0644)
@@ -45,50 +52,84 @@ func Perform(args Arguments, writer io.Writer) error {
 			}
 		}
 		if args["item"] == "" {
-			return fmt.Errorf("-item flag should be specified")
+			return fmt.Errorf("-item flag has to be specified")
 		}
 		err = json.Unmarshal([]byte(args["item"]), &jsonUser)
 		if err != nil {
 			return fmt.Errorf("-json object is not valid %w", error)
 		}
 
-		if jsonUser.Id == "" || jsonUser.Email == "" || jsonUser.Age == "" {
+		if jsonUser.Id == "" || jsonUser.Email == "" || jsonUser.Age == 0 {
 			return fmt.Errorf("-data is not full or incorrect")
 		}
 		for _, value := range jsonUsers {
 			if value.Id == jsonUser.Id {
-				return fmt.Errorf("Such Id already exists")
+				message := "Item with id " + jsonUser.Id + " already exists"
+				writer.Write([]byte(message))
+				return nil
 			}
 		}
 
 		jsonUsers = append(jsonUsers, jsonUser)
 
-		fmt.Printf("%+v", jsonUsers)
 		data, error := json.Marshal(jsonUsers)
 		if error != nil {
 			return fmt.Errorf("%w", error)
 		}
 
-		fmt.Println(data)
-		if error := ioutil.WriteFile("users.json", data, 0644); error != nil {
+		if error := ioutil.WriteFile(args["fileName"], data, 0644); error != nil {
 			fileJson.Close()
 			return fmt.Errorf("%w", error)
 		}
+	case "list":
+		contentOfFile, error := ioutil.ReadAll(fileJson)
+		if error != nil {
+			return fmt.Errorf("%w", error)
+		}
+		writer.Write(contentOfFile)
+	case "findById":
+		if args["id"] == "" {
+			return fmt.Errorf("-id flag has to be specified")
+		}
+		contentOfFile, error := ioutil.ReadAll(fileJson)
+		if error != nil {
+			return fmt.Errorf("Cannot read the file - %w", error)
+		}
+		if error := json.Unmarshal(contentOfFile, &jsonUsers); error != nil {
+			return fmt.Errorf("%w", error)
+		}
+		for _, value := range jsonUsers {
+			if value.Id == args["id"] {
+				buff, _ := json.Marshal(value)
+				writer.Write(buff)
+				return nil
+			}
+		}
+		writer.Write([]byte(""))
+	case "remove":
+		if args["id"] == "" {
+			return fmt.Errorf("-id flag has to be specified")
+		}
+		contentOfFile, error := ioutil.ReadAll(fileJson)
+		if error != nil {
+			return fmt.Errorf("Cannot read the file - %w", error)
+		}
+		if error := json.Unmarshal(contentOfFile, &jsonUsers); error != nil {
+			return fmt.Errorf("%w", error)
+		}
+		for index, value := range jsonUsers {
+			if value.Id == args["id"] {
+				tempslice := removeElementOfSlice(jsonUsers, index)
+				byteBuff, _ := json.Marshal(tempslice)
+				ioutil.WriteFile(args["fileName"], byteBuff, 0644)
+				return nil
+			}
+		}
+		message := "Item with id " + args["id"] + " not found"
+		writer.Write([]byte(message))
+	default:
+		return fmt.Errorf("Operation %s not allowed!", args["operation"])
 	}
-
-	//case "list":
-
-	//	return 2
-	//case "findById":
-	//	return 3
-	//case "remove":
-	//	return 4
-	//default:
-	//	return 5
-	//}
-	//return nil */
-	//}
-	//}
 	return nil
 }
 func parseArgs() (output Arguments) {
@@ -100,10 +141,12 @@ func parseArgs() (output Arguments) {
 	flag.StringVar(&item, "item", "", "data add to JSON")
 	var fileName string
 	flag.StringVar(&fileName, "fileName", "", "path to the JSON file")
-
+	var id string
+	flag.StringVar(&id, "id", "", "id argument for using with FindById and Remove command")
 	flag.Parse()
 
-	output = make(map[string]string, 3)
+	output = make(map[string]string, 4)
+	output["id"] = id
 	output["operation"] = operation
 	output["item"] = item
 	output["fileName"] = fileName
@@ -115,4 +158,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+}
+
+func removeElementOfSlice(s []user, i int) []user {
+	ret := make([]user, 0)
+	ret = append(ret, s[:i]...)
+	return append(ret, s[i+1:]...)
 }
