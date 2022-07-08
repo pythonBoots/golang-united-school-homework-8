@@ -32,7 +32,8 @@ func Perform(args Arguments, writer io.Writer) error {
 	}
 
 	// open file
-	fileJson, error := os.OpenFile(args["fileName"], os.O_RDWR|os.O_CREATE, 0644)
+	fileToReadWrite := args["fileName"]
+	fileJson, error := os.OpenFile(fileToReadWrite, os.O_RDWR|os.O_CREATE, 0644)
 	if error != nil {
 		return fmt.Errorf("%w", error)
 	}
@@ -40,16 +41,15 @@ func Perform(args Arguments, writer io.Writer) error {
 
 	switch args["operation"] {
 	case "add":
+
 		// reading the content of file and put an empty slice to it
 		tempBuffer, err := ioutil.ReadAll(fileJson)
 		if err != nil {
 			return fmt.Errorf("%w", error)
 		}
-
+		jsonUsers = make([]user, 0)
 		if len(tempBuffer) != 0 {
-			if err := json.Unmarshal(tempBuffer, &jsonUsers); err != nil {
-				return fmt.Errorf("%w", error)
-			}
+			json.Unmarshal(tempBuffer, &jsonUsers)
 		}
 		if args["item"] == "" {
 			return fmt.Errorf("-item flag has to be specified")
@@ -77,7 +77,7 @@ func Perform(args Arguments, writer io.Writer) error {
 			return fmt.Errorf("%w", error)
 		}
 
-		if error := ioutil.WriteFile(args["fileName"], data, 0644); error != nil {
+		if error := ioutil.WriteFile(fileToReadWrite, data, 0644); error != nil {
 			fileJson.Close()
 			return fmt.Errorf("%w", error)
 		}
